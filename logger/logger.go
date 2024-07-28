@@ -6,19 +6,14 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"net"
-	"net/http"
-	"net/http/httputil"
 	"os"
-	"runtime/debug"
-	"strings"
 	"time"
 )
 
 var lg *zap.Logger
 
 // InitLogger 初始化Logger
-func Init() (err error) {
+func Init(model string) (err error) {
 	writeSyncer := getLogWriter(
 		viper.GetString("log.filename"),
 		viper.GetInt("log.max_size"),
@@ -30,7 +25,17 @@ func Init() (err error) {
 	if err != nil {
 		return
 	}
-	core := zapcore.NewCore(encoder, writeSyncer, l)
+	//由环境定义到底是输出到控制头还是输出到日志
+	var core zapcore.Core
+	if model == "dev" {
+		devEncoding := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+		core = zapcore.NewTee(
+			zapcore.NewCore(devEncoding, zapcore.Lock(os.Stdout), zapcore.DebugLevel),
+			zapcore.NewCore(encoder, writeSyncer, l),
+		)
+	} else {
+		core = zapcore.NewCore(encoder, writeSyncer, l)
+	}
 
 	lg = zap.New(core, zap.AddCaller())
 	zap.ReplaceGlobals(lg) // 替换zap包中全局的logger实例，后续在其他包中只需使用zap.L()调用即可
@@ -79,49 +84,49 @@ func GinLogger() gin.HandlerFunc {
 	}
 }
 
-// GinRecovery recover掉项目可能出现的panic，并使用zap记录相关日志
-func GinRecovery(stack bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		defer func() {
-			if err := recover(); err != nil {
-				// Check for a broken connection, as it is not really a
-				// condition that warrants a panic stack trace.
-				var brokenPipe bool
-				if ne, ok := err.(*net.OpError); ok {
-					if se, ok := ne.Err.(*os.SyscallError); ok {
-						if strings.Contains(strings.ToLower(se.Error()), "broken pipe") || strings.Contains(strings.ToLower(se.Error()), "connection reset by peer") {
-							brokenPipe = true
-						}
-					}
-				}
-
-				httpRequest, _ := httputil.DumpRequest(c.Request, false)
-				if brokenPipe {
-					zap.L().Error(c.Request.URL.Path,
-						zap.Any("error", err),
-						zap.String("request", string(httpRequest)),
-					)
-					// If the connection is dead, we can't write a status to it.
-					c.Error(err.(error)) // nolint: errcheck
-					c.Abort()
-					return
-				}
-
-				if stack {
-					zap.L().Error("[Recovery from panic]",
-						zap.Any("error", err),
-						zap.String("request", string(httpRequest)),
-						zap.String("stack", string(debug.Stack())),
-					)
-				} else {
-					zap.L().Error("[Recovery from panic]",
-						zap.Any("error", err),
-						zap.String("request", string(httpRequest)),
-					)
-				}
-				c.AbortWithStatus(http.StatusInternalServerError)
-			}
-		}()
-		c.Next()
-	}
-}
+//// GinRecovery recover掉项目可能出现的panic，并使用zap记录相关日志
+//func GinRecovery(stack bool) gin.HandlerFunc {
+//	return func(c *gin.Context) {
+//		defer func() {
+//			if err := recover(); err != nil {
+//				// Check for a broken connection, as it is not really a
+//				// condition that warrants a panic stack trace.
+//				var brokenPipe bool
+//				if ne, ok := err.(*net.OpError); ok {
+//					if se, ok := ne.Err.(*os.SyscallError); ok {
+//						if strings.Contains(strings.ToLower(se.Error()), "broken pipe") || strings.Contains(strings.ToLower(se.Error()), "connection reset by peer") {
+//							brokenPipe = true
+//						}
+//					}
+//				}
+//
+//				httpRequest, _ := httputil.DumpRequest(c.Request, false)
+//				if brokenPipe {
+//					zap.L().Error(c.Request.URL.Path,
+//						zap.Any("error", err),
+//						zap.String("request", string(httpRequest)),
+//					)
+//					// If the connection is dead, we can't write a status to it.
+//					c.Error(err.(error)) // nolint: errcheck
+//					c.Abort()
+//					return
+//				}
+//
+//				if stack {
+//					zap.L().Error("[Recovery from panic]",
+//						zap.Any("error", err),
+//						zap.String("request", string(httpRequest)),
+//						zap.String("stack", string(debug.Stack())),
+//					)
+//				} else {
+//					zap.L().Error("[Recovery from panic]",
+//						zap.Any("error", err),
+//						zap.String("request", string(httpRequest)),
+//					)
+//				}
+//				c.AbortWithStatus(http.StatusInternalServerError)
+//			}
+//		}()
+//		c.Next()
+//	}
+//}

@@ -1,7 +1,9 @@
 app:
   name: "web_app"
   mode: "dev"
-  port: 8081
+  port: 8888
+  start_time: "2020-02-02"
+  mechine_id: 1
 log:
   level: "debug"
   filename: "web_app.log"
@@ -13,8 +15,8 @@ mysql:
   port: 3306
   user: "root"
   password: "12345678"
-  dbname: "golangdata"
-  max_open_conns: 200
+  dbname: "bluebell"
+  max_open_conns: 1
   max_idle_conns: 50
 redis:
   host: "127.0.0.1"

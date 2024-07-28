@@ -6,8 +6,9 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"goWeb/dao/mysql"
-	"goWeb/dao/redis"
+	"goWeb/dao/redisCon"
 	"goWeb/logger"
+	"goWeb/pkg/snowflake"
 	"goWeb/routers"
 	"goWeb/settings"
 	"net/http"
@@ -25,7 +26,7 @@ func main() {
 		return
 	}
 	//2.初始化日志
-	if err := logger.Init(); err != nil {
+	if err := logger.Init(viper.GetString("app.mode")); err != nil {
 		fmt.Println("log init error")
 		return
 	}
@@ -33,20 +34,24 @@ func main() {
 	zap.L().Debug("log init success")
 	//3.初始化mysql链接
 	if err := mysql.Init(); err != nil {
-		fmt.Println("mysql init error")
 		return
 	}
+	fmt.Printf("mysql:", mysql.GetDB())
 	defer mysql.Close()
 	//4.初始化redis链接
-	if err := redis.Init(); err != nil {
+	if err := redisCon.Init(); err != nil {
 		fmt.Printf("error:%s", err)
 		return
 	}
-	defer redis.Close()
+	defer redisCon.Close()
+	//初始化雪花算法
+	if err := snowflake.Init(viper.GetString("app.start_time"), viper.GetInt64("app.mechine_id")); err != nil {
+		return
+	}
 	//5.注册路由
-	r := routers.Setup()
+	r := routers.Setup(viper.GetString("app.mode"))
 	//6.启动服务
-	r.Run()
+	r.Run(":8888")
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("%d", viper.GetInt("app.port")),
 		Handler: r,
